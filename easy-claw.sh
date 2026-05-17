@@ -407,7 +407,7 @@ cmd_models() {
     return
   fi
 
-  "$OPENCODE" models 2>"$MODEL_LIST_FILE" > "$MODEL_LIST_FILE"
+    "$OPENCODE" models > "$MODEL_LIST_FILE" 2>&1
   echo "Available OpenCode models ($(wc -l < "$MODEL_LIST_FILE" | tr -d ' ')):"
   awk '{print NR")", $0}' "$MODEL_LIST_FILE"
   echo ""
@@ -422,7 +422,7 @@ cmd_model() {
 
   # Rebuild model list if missing
   if [ ! -f "$MODEL_LIST_FILE" ]; then
-    "$OPENCODE" models 2>"$MODEL_LIST_FILE" > "$MODEL_LIST_FILE"
+    "$OPENCODE" models > "$MODEL_LIST_FILE" 2>&1
   fi
 
   case "$action" in
