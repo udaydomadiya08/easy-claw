@@ -57,12 +57,19 @@ Sunday
 
 $ ./easy-claw.sh task "what was my first question"
 Your first question was: "what time is it"
+```
 
+**Auto-interactive:** If the model needs more info, it automatically asks and waits:
+
+```
 $ ./easy-claw.sh task "send a message to uday"
 Which channel should I use? (whatsapp/telegram)
 > whatsapp
 WhatsApp not configured. Run: openclaw channels login --channel whatsapp
+> exit          ← type exit/quit/bye/stop/q to force exit
 ```
+
+> Empty input (just pressing enter) keeps waiting. The session exits automatically once the task is done (model gives a final answer without asking more).
 
 ### Commands
 
@@ -78,6 +85,7 @@ WhatsApp not configured. Run: openclaw channels login --channel whatsapp
 ./easy-claw.sh task "what was my first question"  # Context preserved
 
 # If the model needs more info (asks a question), it auto-prompts:
+# Type your response. Empty input = hold. exit/quit/bye/stop/q = force exit.
 ./easy-claw.sh task "send a message to uday"
 # → "Which channel should I use?"
 # > whatsapp
