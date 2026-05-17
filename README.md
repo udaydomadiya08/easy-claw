@@ -11,9 +11,10 @@ running entirely on local models via Ollama with zero API costs.
 # One-line install
 git clone https://github.com/udaydomadiya08/easy-claw.git
 cd easy-claw
-chmod +x easy-claw.sh
-ln -s "$PWD/easy-claw.sh" ~/bin/easy-claw
+chmod +x easy-claw.sh hooks/*.sh modules/*.sh
+ln -s "$PWD/easy-claw.sh" "$(dirname "$(command -v opencode)")/easy-claw"
 easy-claw setup
+easy-claw task "what time is it"   # First task!
 ```
 
 ## Why Easy Claw?
