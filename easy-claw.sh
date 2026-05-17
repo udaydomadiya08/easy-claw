@@ -66,14 +66,31 @@ cmd_task() {
   echo "🦞 Easy Claw executing: $message"
   echo "───────────────────────────────────────────────"
 
-  # Run via OpenClaw local agent or OpenCode
-  if command -v "$OPENCODE" &>/dev/null; then
-    $OPENCODE run "$message"
-  elif $OPENCLAW gateway health &>/dev/null; then
-    $OPENCLAW agent --message "$message" --local
+  # Run via OpenClaw local agent with Ollama
+  # This processes natural language: "i want to check time" → runs date
+  if $OPENCLAW gateway health &>/dev/null; then
+    $OPENCLAW agent --agent main --local \
+      --message "$message" \
+      --model ollama/qwen2.5-coder:latest \
+      --thinking low 2>&1 || {
+        echo "⚠ OpenClaw agent failed, running directly..."
+        bash -c "$message"
+      }
   else
-    echo "No executor available. Install OpenClaw or OpenCode."
-    exit 1
+    # Fallback: try interpreting directly for common patterns
+    echo "🦞 Easy Claw processing: $message"
+    echo "───────────────────────────────────────────────"
+    case "$message" in
+      *time*|*date*) date ;;
+      *disk*|*storage*) df -h / ;;
+      *memory*|*ram*) vm_stat 2>/dev/null | head -10 || free -h ;;
+      *who*|*user*) whoami ;;
+      *dir*|*list*|*file*) ls -la ;;
+      *uptime*|*up*|*load*) uptime ;;
+      *ip*|*address*) ifconfig en0 2>/dev/null | grep "inet " || ip addr show 2>/dev/null ;;
+      *weather*|*temp*) curl -s "wttr.in/?format=3" 2>/dev/null || echo "wttr.in unavailable" ;;
+      *) echo "I don't understand that directly. Try: easy-claw task 'check the time'" ;;
+    esac
   fi
 
   local exit_code=$?
