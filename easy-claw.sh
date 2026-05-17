@@ -153,9 +153,11 @@ for line in sys.stdin:
     local last_line
     last_line=$(echo "$response" | tail -1)
     if echo "$last_line" | grep -qE '[?]'; then
-      printf "> "
-      read -r user_input
-      [ -z "$user_input" ] && break
+      local user_input=""
+      while [ -z "$user_input" ]; do
+        printf "> "
+        read -r user_input
+      done
       current_message="$user_input"
       continue_flag="--session $(cat "$EASYCLAW_SESSION_FILE" 2>/dev/null)"
     else
