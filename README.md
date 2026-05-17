@@ -58,14 +58,10 @@ Sunday
 $ ./easy-claw.sh task "what was my first question"
 Your first question was: "what time is it"
 
-$ ./easy-claw.sh interact
-🦞 Easy Claw — interactive mode (type exit to quit)
-───────────────────────────────────────────────
-> send a message to uday
-I need a channel. Do you have WhatsApp or Telegram configured?
+$ ./easy-claw.sh task "send a message to uday"
+Which channel should I use? (whatsapp/telegram)
 > whatsapp
-WhatsApp isn't logged in yet. Run `openclaw channels login --channel whatsapp`
-> exit
+WhatsApp not configured. Run: openclaw channels login --channel whatsapp
 ```
 
 ### Commands
@@ -81,9 +77,11 @@ WhatsApp isn't logged in yet. Run `openclaw channels login --channel whatsapp`
 ./easy-claw.sh task "what is my username"
 ./easy-claw.sh task "what was my first question"  # Context preserved
 
-# Interactive mode (back and forth conversation)
-./easy-claw.sh interact                       # Start a live session
-./easy-claw.sh interact "send a message"      # Start with an initial prompt
+# If the model needs more info (asks a question), it auto-prompts:
+./easy-claw.sh task "send a message to uday"
+# → "Which channel should I use?"
+# > whatsapp
+# → "WhatsApp not configured. Run: openclaw channels login --channel whatsapp"
 
 # Privacy
 ./easy-claw.sh privacy                        # Show where data goes
