@@ -8,7 +8,7 @@ export OPENCODE_BIN="${OPENCODE_BIN:-/Users/uday/.opencode/bin/opencode}"
 export OPENCLAW_BIN="${OPENCLAW_BIN:-openclaw}"
 
 # Default model (OpenCode-provided free model — no API keys needed)
-export EASYCLAW_MODEL="${EASYCLAW_MODEL:-opencode/deepseek-v4-flash-free}"
+export EASYCLAW_MODEL=opencode/deepseek-v4-flash-free
 
 # Data directories
 export EASYCLAW_SKILLS_DIR="${EASYCLAW_DIR}/skills"

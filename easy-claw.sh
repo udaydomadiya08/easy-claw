@@ -149,6 +149,34 @@ for line in sys.stdin:
   return $exit_code
 }
 
+# ─── Interactive mode — back and forth with the model ──
+cmd_interact() {
+  local message="$*"
+
+  # Ensure server is running
+  if [ ! -f "$OPENCODE_PIDFILE" ] || ! kill -0 "$(cat "$OPENCODE_PIDFILE")" 2>/dev/null; then
+    cmd_start >/dev/null 2>&1
+    sleep 1
+  fi
+
+  echo "🦞 Easy Claw — interactive mode (type exit to quit)"
+  echo "───────────────────────────────────────────────"
+
+  if [ -n "$message" ]; then
+    "$OPENCODE" run "$message" --attach "http://127.0.0.1:$OPENCODE_PORT" --model "$EASYCLAW_MODEL"
+    echo ""
+  fi
+
+  while true; do
+    printf "> "
+    read -r input
+    [ -z "$input" ] && continue
+    [ "$input" = "exit" ] || [ "$input" = "quit" ] && break
+    "$OPENCODE" run "$input" --attach "http://127.0.0.1:$OPENCODE_PORT" --continue --model "$EASYCLAW_MODEL"
+    echo ""
+  done
+}
+
 # ─── Send message to OpenClaw agent ──────────────────────────
 cmd_agent() {
   local message="$*"
@@ -539,6 +567,7 @@ Usage: easy-claw <command> [options]
 
 Commands:
   task <msg>     Say what you want — Easy Claw figures it out
+  interact|chat  Interactive mode — back and forth conversation
   start          Start OpenCode server (background daemon)
   stop           Stop the server
   restart        Restart the server
@@ -603,6 +632,7 @@ main() {
     stop) cmd_stop ;;
     restart) cmd_restart ;;
     task|run) cmd_task "$@" ;;
+    interact|chat) cmd_interact "$@" ;;
     agent) cmd_agent "$@" ;;
     cron) cmd_cron "$@" ;;
     skill) cmd_skill "$@" ;;
