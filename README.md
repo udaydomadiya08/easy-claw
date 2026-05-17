@@ -57,6 +57,15 @@ Sunday
 
 $ ./easy-claw.sh task "what was my first question"
 Your first question was: "what time is it"
+
+$ ./easy-claw.sh interact
+🦞 Easy Claw — interactive mode (type exit to quit)
+───────────────────────────────────────────────
+> send a message to uday
+I need a channel. Do you have WhatsApp or Telegram configured?
+> whatsapp
+WhatsApp isn't logged in yet. Run `openclaw channels login --channel whatsapp`
+> exit
 ```
 
 ### Commands
@@ -71,6 +80,10 @@ Your first question was: "what time is it"
 ./easy-claw.sh task "check disk space"        # NL → command execution
 ./easy-claw.sh task "what is my username"
 ./easy-claw.sh task "what was my first question"  # Context preserved
+
+# Interactive mode (back and forth conversation)
+./easy-claw.sh interact                       # Start a live session
+./easy-claw.sh interact "send a message"      # Start with an initial prompt
 
 # Privacy
 ./easy-claw.sh privacy                        # Show where data goes
