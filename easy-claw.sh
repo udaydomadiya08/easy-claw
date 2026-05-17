@@ -78,6 +78,10 @@ cmd_task() {
     fi
   fi
 
+  # Build permissions flag
+  local perm_flag=""
+  [ "$EASYCLAW_SKIP_PERMISSIONS" = "true" ] && perm_flag="--dangerously-skip-permissions"
+
   # Send to OpenCode server (non-interactive, JSON output)
   local result
   result=$("$OPENCODE" run "$message" \
@@ -85,7 +89,7 @@ cmd_task() {
     --model "$EASYCLAW_MODEL" \
     $continue_flag \
     --format json \
-    --dangerously-skip-permissions 2>&1)
+    $perm_flag 2>&1)
 
   local exit_code=$?
 
@@ -466,6 +470,87 @@ cmd_model() {
   esac
 }
 
+# ─── Security settings ──────────────────────────────
+cmd_security() {
+  local action="$1"
+  case "$action" in
+    toggle)
+      local current
+      current=$(grep "^export EASYCLAW_SKIP_PERMISSIONS=" "$EASYCLAW_DIR/config.sh" | cut -d= -f2 | tr -d '"')
+      if [ "$current" = "true" ]; then
+        sed -i '' 's/^export EASYCLAW_SKIP_PERMISSIONS=true/export EASYCLAW_SKIP_PERMISSIONS=false/' "$EASYCLAW_DIR/config.sh"
+        echo "⚠ Permission prompts ON — OpenCode will ask before each command"
+      else
+        sed -i '' 's/^export EASYCLAW_SKIP_PERMISSIONS=false/export EASYCLAW_SKIP_PERMISSIONS=true/' "$EASYCLAW_DIR/config.sh"
+        echo "✓ Permission prompts OFF — all commands auto-approved"
+      fi
+      ;;
+    on)
+      sed -i '' 's/^export EASYCLAW_SKIP_PERMISSIONS=false/export EASYCLAW_SKIP_PERMISSIONS=true/' "$EASYCLAW_DIR/config.sh" 2>/dev/null
+      echo "✓ Permission prompts OFF"
+      ;;
+    off)
+      sed -i '' 's/^export EASYCLAW_SKIP_PERMISSIONS=true/export EASYCLAW_SKIP_PERMISSIONS=false/' "$EASYCLAW_DIR/config.sh" 2>/dev/null
+      echo "⚠ Permission prompts ON"
+      ;;
+    show|"")
+      if [ "$EASYCLAW_SKIP_PERMISSIONS" = "true" ]; then
+        echo "Status: auto-approve (all commands run without asking)"
+        echo "To enable prompts: easy-claw security off"
+      else
+        echo "Status: ask before each command"
+        echo "To disable prompts: easy-claw security on"
+      fi
+      ;;
+    *)
+      echo "Usage: easy-claw security [on|off|toggle|show]"
+      exit 1
+      ;;
+  esac
+}
+
+# ─── Privacy — data handling info ───────────────────
+cmd_privacy() {
+  local action="$1"
+  case "$action" in
+    local|local-only)
+      echo "Switching to local-only mode..."
+      echo "Make sure Ollama is running with a model (e.g. qwen2.5-coder)"
+      echo ""
+      local local_model="${2:-ollama/qwen2.5-coder:latest}"
+      sed -i '' "s|^export EASYCLAW_MODEL=.*|export EASYCLAW_MODEL=${local_model}|" "$EASYCLAW_DIR/config.sh"
+      echo "✓ Model set to: $local_model (100% local, zero data leaves your machine)"
+      ;;
+    status|"")
+      local model="$EASYCLAW_MODEL"
+      echo "Current model: $model"
+      case "$model" in
+        opencode/*)
+          echo "Data:     sent to OpenCode cloud server"
+          echo "Privacy:  your queries/task data leave this machine"
+          echo ""
+          echo "For local-only: easy-claw privacy local"
+          echo "  (requires Ollama with a model like qwen2.5-coder)"
+          ;;
+        ollama/*)
+          echo "Data:     stays on this machine (local Ollama)"
+          echo "Privacy:  zero data leaves your machine"
+          ;;
+        *)
+          echo "Privacy:  depends on model provider"
+          ;;
+      esac
+      ;;
+    *)
+      echo "Usage: easy-claw privacy [status|local [model]]"
+      echo "  status     — show current model privacy status"
+      echo "  local      — switch to local Ollama model (default: qwen2.5-coder)"
+      echo "  local <m>  — switch to specific local model"
+      exit 1
+      ;;
+  esac
+}
+
 # ─── Help ────────────────────────────────────────────────────
 cmd_help() {
   cat <<'EOF'
@@ -491,6 +576,8 @@ Commands:
   mcp            Manage MCP connectors
   models [prov]  List available OpenCode models
   model set|show Set/show the active model
+  security       Toggle/show permission prompts
+  privacy        Show data handling and switch to local-only
   version        Show version
   setup          One-time setup (first run auto-runs this)
 
@@ -531,6 +618,8 @@ main() {
     setup) cmd_setup ;;
     models) cmd_models "$@" ;;
     model) cmd_model "$@" ;;
+    security) cmd_security "$@" ;;
+    privacy) cmd_privacy "$@" ;;
     *)
       echo "Unknown command: $cmd"
       cmd_help
