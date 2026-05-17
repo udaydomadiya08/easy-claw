@@ -7,11 +7,26 @@ best features from **OpenClaw**, **Hermes Agent**, **Claude Code**, and
 **Claude Desktop** — powered by OpenCode models as the core reasoning engine,
 running entirely on local models via Ollama with zero API costs.
 
-```bash
-# One-line install — zero config, works immediately
-git clone https://github.com/udaydomadiya08/easy-claw.git
-cd easy-claw
-./easy-claw.sh task "what time is it"   # First task — auto-starts everything!
+🦞 Easy Claw — pick a model to get started
+
+1) opencode/big-pickle
+2) opencode/deepseek-v4-flash-free
+3) opencode/minimax-m2.5-free
+4) opencode/nemotron-3-super-free
+5) opencode/qwen3.6-plus-free
+6) ollama/qwen2.5:3b
+7) ollama/qwen2.5:7b
+
+Enter number (1-7): 2
+✓ Model set to: opencode/deepseek-v4-flash-free
+
+Sun May 17 18:26:46 IST
+
+$ ./easy-claw.sh task "and what day is it"
+Sunday
+
+$ ./easy-claw.sh task "what was my first question"
+Your first question was: "what time is it"
 ```
 
 ## Why Easy Claw?
@@ -72,10 +87,11 @@ self-improvement. Claude Code has skills and hooks. Claude Desktop has MCP.
 ```bash
 git clone https://github.com/udaydomadiya08/easy-claw.git
 cd easy-claw
-./easy-claw.sh task "what time is it"   # First run auto-setups everything
+./easy-claw.sh task "what time is it"
+# First run → picks model once, auto-starts server, runs task → clean answer
 ```
 
-> **No `chmod +x`, no `ln -s`, no `easy-claw setup` needed.** The script self-fixes permissions and auto-starts the OpenCode server on first run. Tasks auto-continue the same session — context is preserved across calls. Output is always clean — just the answer, no noise.
+> **No `chmod +x`, no `ln -s`, no `easy-claw setup` needed.** First run asks you to pick a model (from OpenCode cloud or your local Ollama models), saves it, and runs your task. Every subsequent task continues the same session — context preserved, output clean, no noise.
 
 To add to PATH for `easy-claw` from anywhere:
 ```bash
@@ -85,9 +101,10 @@ ln -s "$PWD/easy-claw.sh" ~/.opencode/bin/easy-claw
 ### Usage
 
 ```bash
-# List and select models (always pulls fresh list from OpenCode)
-./easy-claw.sh models                         # Show available models with numbers
+# List available models (OpenCode cloud + your local Ollama models)
+./easy-claw.sh models                         # Shows all with numbers
 ./easy-claw.sh model set 3                    # Select by index
+./easy-claw.sh model set ollama/qwen2.5:7b    # Or by full name
 
 # Execute tasks — clean output, just the answer
 ./easy-claw.sh task "what time is it"
@@ -96,6 +113,10 @@ ln -s "$PWD/easy-claw.sh" ~/.opencode/bin/easy-claw
 # Session continuation — context preserved across tasks
 ./easy-claw.sh task "what is my username"     # → uday
 ./easy-claw.sh task "what was my first question"  # → "what is my username"
+
+# Privacy — see where your data goes, switch to local-only
+./easy-claw.sh privacy                        # Show current model data handling
+./easy-claw.sh privacy local                  # Switch to local Ollama model
 
 # Send message via any channel (requires OpenClaw channel setup)
 easy-claw channel login
@@ -206,7 +227,30 @@ easy-claw/
 
 - **macOS**, **Linux**, or **Windows (WSL2)**
 - **Node.js** 22+ (for OpenCode)
-- **OpenCode** — `npm install -g opencode@latest` (free models built-in, no API keys)
+- **OpenCode** — `npm install -g opencode@latest` (free cloud models built-in)
+- **Ollama** (optional) — for 100% local privacy, no data leaves your machine
+
+## Privacy & Data Handling
+
+Easy Claw supports two types of models:
+
+| Model Type | Data Leaves Your Machine? | API Key Needed? |
+|---|---|---|
+| `opencode/*` (cloud) | Yes — sent to OpenCode servers | No |
+| `ollama/*` (local) | No — runs entirely local | No |
+
+First run shows all available models from both sources. Pick whichever you prefer:
+
+```bash
+# See current model's privacy status
+./easy-claw.sh privacy
+
+# Switch to local-only (requires Ollama)
+./easy-claw.sh privacy local
+# Shows your installed Ollama models, prompts you to pick one
+```
+
+> **Tip:** For sensitive data, use `ollama/*` models. For convenience with zero setup, use `opencode/*` models.
 
 ## The Vision
 
