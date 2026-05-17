@@ -78,10 +78,6 @@ cmd_task() {
     fi
   fi
 
-  # Build permissions flag
-  local perm_flag=""
-  [ "$EASYCLAW_SKIP_PERMISSIONS" = "true" ] && perm_flag="--dangerously-skip-permissions"
-
   # Send to OpenCode server (non-interactive, JSON output)
   local result
   result=$("$OPENCODE" run "$message" \
@@ -89,7 +85,7 @@ cmd_task() {
     --model "$EASYCLAW_MODEL" \
     $continue_flag \
     --format json \
-    $perm_flag 2>&1)
+    --dangerously-skip-permissions 2>&1)
 
   local exit_code=$?
 
@@ -410,6 +406,15 @@ HOOKEOF
 # ─── List available models with indices ─────────────────
 MODEL_LIST_FILE="$EASYCLAW_DIR/state/.model_list"
 
+build_model_list() {
+  # OpenCode models
+  "$OPENCODE" models > "$MODEL_LIST_FILE" 2>&1
+  # Ollama models (if available)
+  if command -v ollama &>/dev/null; then
+    ollama list 2>/dev/null | tail -n +2 | awk '{print "ollama/"$1}' >> "$MODEL_LIST_FILE"
+  fi
+}
+
 cmd_models() {
   local filter="${1:-}"
   if [ -n "$filter" ]; then
@@ -417,8 +422,8 @@ cmd_models() {
     return
   fi
 
-    "$OPENCODE" models > "$MODEL_LIST_FILE" 2>&1
-  echo "Available OpenCode models ($(wc -l < "$MODEL_LIST_FILE" | tr -d ' ')):"
+  build_model_list
+  echo "Available models ($(wc -l < "$MODEL_LIST_FILE" | tr -d ' ')):"
   awk '{print NR")", $0}' "$MODEL_LIST_FILE"
   echo ""
   echo "Current model: $EASYCLAW_MODEL"
@@ -432,7 +437,7 @@ cmd_model() {
 
   # Rebuild model list if missing
   if [ ! -f "$MODEL_LIST_FILE" ]; then
-    "$OPENCODE" models > "$MODEL_LIST_FILE" 2>&1
+    build_model_list
   fi
 
   case "$action" in
@@ -442,8 +447,7 @@ cmd_model() {
 
       local model=""
       if [[ "$input" =~ ^[0-9]+$ ]]; then
-        # Always pull fresh list so index always matches current OpenCode models
-        "$OPENCODE" models > "$MODEL_LIST_FILE" 2>&1
+        build_model_list  # fresh list so index matches
         model=$(sed -n "${input}p" "$MODEL_LIST_FILE" 2>/dev/null)
         [ -z "$model" ] && { echo "Invalid index: $input"; exit 1; }
       else
@@ -471,55 +475,26 @@ cmd_model() {
 }
 
 # ─── Security settings ──────────────────────────────
-cmd_security() {
-  local action="$1"
-  case "$action" in
-    toggle)
-      local current
-      current=$(grep "^export EASYCLAW_SKIP_PERMISSIONS=" "$EASYCLAW_DIR/config.sh" | cut -d= -f2 | tr -d '"')
-      if [ "$current" = "true" ]; then
-        sed -i '' 's/^export EASYCLAW_SKIP_PERMISSIONS=true/export EASYCLAW_SKIP_PERMISSIONS=false/' "$EASYCLAW_DIR/config.sh"
-        echo "⚠ Permission prompts ON — OpenCode will ask before each command"
-      else
-        sed -i '' 's/^export EASYCLAW_SKIP_PERMISSIONS=false/export EASYCLAW_SKIP_PERMISSIONS=true/' "$EASYCLAW_DIR/config.sh"
-        echo "✓ Permission prompts OFF — all commands auto-approved"
-      fi
-      ;;
-    on)
-      sed -i '' 's/^export EASYCLAW_SKIP_PERMISSIONS=false/export EASYCLAW_SKIP_PERMISSIONS=true/' "$EASYCLAW_DIR/config.sh" 2>/dev/null
-      echo "✓ Permission prompts OFF"
-      ;;
-    off)
-      sed -i '' 's/^export EASYCLAW_SKIP_PERMISSIONS=true/export EASYCLAW_SKIP_PERMISSIONS=false/' "$EASYCLAW_DIR/config.sh" 2>/dev/null
-      echo "⚠ Permission prompts ON"
-      ;;
-    show|"")
-      if [ "$EASYCLAW_SKIP_PERMISSIONS" = "true" ]; then
-        echo "Status: auto-approve (all commands run without asking)"
-        echo "To enable prompts: easy-claw security off"
-      else
-        echo "Status: ask before each command"
-        echo "To disable prompts: easy-claw security on"
-      fi
-      ;;
-    *)
-      echo "Usage: easy-claw security [on|off|toggle|show]"
-      exit 1
-      ;;
-  esac
-}
-
 # ─── Privacy — data handling info ───────────────────
 cmd_privacy() {
   local action="$1"
   case "$action" in
     local|local-only)
-      echo "Switching to local-only mode..."
-      echo "Make sure Ollama is running with a model (e.g. qwen2.5-coder)"
+      if ! command -v ollama &>/dev/null; then
+        echo "Ollama not found. Install from https://ollama.com"
+        exit 1
+      fi
+      echo "Local Ollama models available:"
+      ollama list 2>/dev/null | tail -n +2 | awk '{print "  " $1}'
       echo ""
-      local local_model="${2:-ollama/qwen2.5-coder:latest}"
-      sed -i '' "s|^export EASYCLAW_MODEL=.*|export EASYCLAW_MODEL=${local_model}|" "$EASYCLAW_DIR/config.sh"
-      echo "✓ Model set to: $local_model (100% local, zero data leaves your machine)"
+      local local_model="${2:-}"
+      if [ -z "$local_model" ]; then
+        printf "Enter model name (e.g. qwen2.5-coder:latest): "
+        read -r local_model
+        [ -z "$local_model" ] && local_model="qwen2.5-coder:latest"
+      fi
+      sed -i '' "s|^export EASYCLAW_MODEL=.*|export EASYCLAW_MODEL=ollama/${local_model}|" "$EASYCLAW_DIR/config.sh"
+      echo "✓ Model set to: ollama/$local_model (100% local, zero data leaves your machine)"
       ;;
     status|"")
       local model="$EASYCLAW_MODEL"
@@ -576,7 +551,6 @@ Commands:
   mcp            Manage MCP connectors
   models [prov]  List available OpenCode models
   model set|show Set/show the active model
-  security       Toggle/show permission prompts
   privacy        Show data handling and switch to local-only
   version        Show version
   setup          One-time setup (first run auto-runs this)
@@ -593,6 +567,29 @@ EOF
 # ─── Main dispatcher ─────────────────────────────────────────
 main() {
   load_config
+
+  # First-run model picker — ask once, persist forever
+  if [ ! -f "$EASYCLAW_DIR/state/.model_picked" ] && [ "${1:-help}" != "model" ] && [ "${1:-help}" != "models" ] && [ "${1:-help}" != "privacy" ] && [ "${1:-help}" != "help" ]; then
+    echo "🦞 Easy Claw — pick a model to get started"
+    echo ""
+    build_model_list
+    awk '{print NR")", $0}' "$EASYCLAW_DIR/state/.model_list"
+    echo ""
+    printf "Enter number (1-%d): " "$(wc -l < "$EASYCLAW_DIR/state/.model_list" | tr -d ' ')"
+    read -r choice
+    local model
+    model=$(sed -n "${choice}p" "$EASYCLAW_DIR/state/.model_list" 2>/dev/null)
+    if [ -n "$model" ]; then
+      sed -i '' "s|^export EASYCLAW_MODEL=.*|export EASYCLAW_MODEL=${model}|" "$EASYCLAW_DIR/config.sh"
+      export EASYCLAW_MODEL="$model"
+      echo "✓ Model set to: $model"
+    else
+      echo "Using default: $EASYCLAW_MODEL"
+    fi
+    touch "$EASYCLAW_DIR/state/.model_picked"
+    echo ""
+  fi
+
   local cmd="${1:-help}"
   shift 2>/dev/null || true
 
@@ -618,7 +615,6 @@ main() {
     setup) cmd_setup ;;
     models) cmd_models "$@" ;;
     model) cmd_model "$@" ;;
-    security) cmd_security "$@" ;;
     privacy) cmd_privacy "$@" ;;
     *)
       echo "Unknown command: $cmd"

@@ -16,8 +16,7 @@ export EASYCLAW_HOOKS_DIR="${EASYCLAW_DIR}/hooks"
 export EASYCLAW_MCP_DIR="${EASYCLAW_DIR}/mcp"
 export EASYCLAW_STATE_DIR="${EASYCLAW_DIR}/state"
 
-# Security: skip permission prompts (true = auto-approve, false = ask before each command)
-export EASYCLAW_SKIP_PERMISSIONS="${EASYCLAW_SKIP_PERMISSIONS:-true}"
+# Self-improvement loop
 export EASYCLAW_AUTO_LEARN="${EASYCLAW_AUTO_LEARN:-true}"
 
 # OpenClaw gateway
