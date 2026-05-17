@@ -78,19 +78,40 @@ cmd_task() {
     fi
   fi
 
-  # Send to OpenCode server (non-interactive, JSON output)
-  local result
-  result=$("$OPENCODE" run "$message" \
-    --attach "http://127.0.0.1:$OPENCODE_PORT" \
-    --model "$EASYCLAW_MODEL" \
-    $continue_flag \
-    --format json \
-    --dangerously-skip-permissions 2>&1)
+  # Extract last text from JSON result
+  extract_text() {
+    echo "$1" | python3 -c "
+import sys, json
+last = ''
+for line in sys.stdin:
+    line = line.strip()
+    if not line: continue
+    try:
+        e = json.loads(line)
+        p = e.get('part', {})
+        if p.get('type') == 'text':
+            last = p.get('text', '')
+    except: pass
+if last:
+    sys.stdout.write(last)
+" 2>/dev/null
+  }
 
-  local exit_code=$?
+  # Auto-interactive loop
+  local current_message="$message"
+  while true; do
+    local result
+    result=$("$OPENCODE" run "$current_message" \
+      --attach "http://127.0.0.1:$OPENCODE_PORT" \
+      --model "$EASYCLAW_MODEL" \
+      $continue_flag \
+      --format json \
+      --dangerously-skip-permissions 2>&1)
 
-  # Save session ID from response for continuation
-  echo "$result" | python3 -c "
+    local exit_code=$?
+
+    # Save session ID for continuation
+    echo "$result" | python3 -c "
 import sys, json
 for line in sys.stdin:
     line = line.strip()
@@ -102,31 +123,16 @@ for line in sys.stdin:
             with open('$EASYCLAW_SESSION_FILE', 'w') as f:
                 f.write(sid)
             break
-    except:
-        pass
+    except: pass
 " 2>/dev/null
 
-  # Extract and display final text from JSON events
-  echo "$result" | python3 -c "
-import sys, json
-last_text = ''
-for line in sys.stdin:
-  line = line.strip()
-  if not line:
-    continue
-  try:
-    event = json.loads(line)
-    p = event.get('part', {})
-    if p.get('type') == 'text':
-      last_text = p.get('text', '')
-  except json.JSONDecodeError:
-    pass
-if last_text:
-  sys.stdout.write(last_text + '\n')
-" 2>/dev/null
+    # Extract and show response
+    local response
+    response=$(extract_text "$result")
+    echo "$response"
 
-  # Show tool outputs (the actual command results)
-  echo "$result" | python3 -c "
+    # Show tool outputs
+    echo "$result" | python3 -c "
 import sys, json
 for line in sys.stdin:
   line = line.strip()
@@ -143,9 +149,22 @@ for line in sys.stdin:
     pass
 " 2>/dev/null
 
+    # Check if model is asking a question → auto-enter interactive
+    local last_line
+    last_line=$(echo "$response" | tail -1)
+    if echo "$last_line" | grep -qE '[?]'; then
+      printf "> "
+      read -r user_input
+      [ -z "$user_input" ] && break
+      current_message="$user_input"
+      continue_flag="--session $(cat "$EASYCLAW_SESSION_FILE" 2>/dev/null)"
+    else
+      break
+    fi
+  done
+
   run_hooks "post-task" "$message" "$exit_code" >/dev/null 2>&1
   cmd_learn "$message" >/dev/null 2>&1
-
   return $exit_code
 }
 
