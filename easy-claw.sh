@@ -1,81 +1,140 @@
 #!/bin/bash
 # Easy Claw — Ultimate Free Agentic System
-# OpenCode bridge + OpenClaw backend + Hermes learning loop + Claude Code skills
+# OpenCode models as the NL bridge, OpenClaw as backend, Hermes learning loop
 
 set -e
 
 EASYCLAW_DIR="$(python3 -c "import os,sys; print(os.path.dirname(os.path.realpath(sys.argv[1])))" "$0")"
 OPENCLAW="${OPENCLAW_BIN:-openclaw}"
 OPENCODE="${OPENCODE_BIN:-opencode}"
+OPENCODE_PORT=15999
+OPENCODE_PIDFILE="$EASYCLAW_DIR/state/opencode.pid"
 
-# ─── Configuration ───────────────────────────────────────────
 export EASYCLAW_DIR
 
 load_config() {
-  if [ -f "$EASYCLAW_DIR/config.sh" ]; then
-    source "$EASYCLAW_DIR/config.sh"
-  fi
+  [ -f "$EASYCLAW_DIR/config.sh" ] && source "$EASYCLAW_DIR/config.sh"
 }
 
-# Source modules
 for module in "$EASYCLAW_DIR/modules/"*.sh; do
   [ -f "$module" ] && source "$module"
 done
 
-# ─── Commands ────────────────────────────────────────────────
+# ─── OpenCode server management ────────────────────────────
 
-cmd_help() {
-  cat <<'EOF'
-Easy Claw v1.0 — Ultimate Free Agentic System
-https://github.com/udaydomadiya08/easy-claw
-
-Usage: easy-claw <command> [options]
-
-Commands:
-  help           Show this help
-  task <msg>     Execute a task via OpenCode
-  agent <msg>    Send message to OpenClaw agent
-  cron           Manage scheduled tasks
-  skill          Manage skills (list, create, edit)
-  memory         Manage memory store
-  channel        Manage messaging channels
-  hook           Manage lifecycle hooks
-  status         Show system status
-  learn          Run self-improvement learning loop
-  mcp            Manage MCP connectors
-  setup          Run initial setup wizard
-
-Configuration:
-  EASYCLAW_DIR   Easy Claw installation directory
-  OPENCLAW_BIN   OpenClaw binary path
-  OPENCODE_BIN   OpenCode binary path
-EOF
+cmd_start() {
+  if [ -f "$OPENCODE_PIDFILE" ] && kill -0 "$(cat "$OPENCODE_PIDFILE")" 2>/dev/null; then
+    echo "OpenCode server already running (PID $(cat "$OPENCODE_PIDFILE"))"
+    return 0
+  fi
+  mkdir -p "$EASYCLAW_DIR/state"
+  nohup "$OPENCODE" serve --port "$OPENCODE_PORT" --hostname 127.0.0.1 \
+    > "$EASYCLAW_DIR/state/opencode.log" 2>&1 &
+  echo $! > "$OPENCODE_PIDFILE"
+  sleep 2
+  echo "OpenCode server started (PID $(cat "$OPENCODE_PIDFILE")) on port $OPENCODE_PORT"
 }
 
-# ─── Execute task via OpenCode bridge ────────────────────────
+cmd_stop() {
+  if [ -f "$OPENCODE_PIDFILE" ]; then
+    kill "$(cat "$OPENCODE_PIDFILE")" 2>/dev/null && echo "Stopped" || echo "Not running"
+    rm -f "$OPENCODE_PIDFILE"
+  else
+    echo "No server running"
+  fi
+}
+
+cmd_restart() {
+  cmd_stop
+  sleep 1
+  cmd_start
+}
+
+# ─── Execute task via OpenCode bridge (NL → command) ────────
 cmd_task() {
   local message="$*"
-  if [ -z "$message" ]; then
-    echo "Usage: easy-claw task <message>"
-    exit 1
-  fi
+  [ -z "$message" ] && { echo "Usage: easy-claw task <message>"; exit 1; }
 
-  # Pre-task hooks
   run_hooks "pre-task" "$message"
 
-  echo "🦞 Easy Claw executing: $message"
+  echo "🦞 Easy Claw — processing: $message"
   echo "───────────────────────────────────────────────"
 
-  # Route through OpenClaw local agent (uses whatever model is configured)
-  # The agent handles NL: "check the time" → runs date and returns result
-  $OPENCLAW agent --agent main --local --message "$message" --thinking low 2>&1
+  # Ensure OpenCode server is running
+  if [ ! -f "$OPENCODE_PIDFILE" ] || ! kill -0 "$(cat "$OPENCODE_PIDFILE")" 2>/dev/null; then
+    echo "Starting OpenCode server..."
+    cmd_start
+  fi
+
+  # Send to OpenCode server (non-interactive, JSON output)
+  local result
+  result=$("$OPENCODE" run "$message" \
+    --attach "http://127.0.0.1:$OPENCODE_PORT" \
+    --format json \
+    --dangerously-skip-permissions 2>&1)
 
   local exit_code=$?
 
-  # Post-task hooks
-  run_hooks "post-task" "$message" "$exit_code"
+  # Extract and display final text from JSON events
+  echo "$result" | python3 -c "
+import sys, json
+for line in sys.stdin:
+  line = line.strip()
+  if not line:
+    continue
+  try:
+    event = json.loads(line)
+    if event.get('type') == 'step_finish':
+      parts = event.get('part', {})
+      reason = parts.get('reason', '')
+      tokens = parts.get('tokens', {})
+  except json.JSONDecodeError:
+    pass
+" 2>/dev/null
 
-  # Self-improvement loop (learn from task)
+  # Show readable summary
+  echo "$result" | python3 -c "
+import sys, json
+last_text = ''
+for line in sys.stdin:
+  line = line.strip()
+  if not line:
+    continue
+  try:
+    event = json.loads(line)
+    p = event.get('part', {})
+    if p.get('type') == 'text':
+      last_text = p.get('text', '')
+    elif p.get('type') == 'tool' and p.get('state', {}).get('status') == 'completed':
+      out = p.get('state', {}).get('output', '')
+      title = p.get('state', {}).get('title', '') or p.get('state', {}).get('input', {}).get('description', '')
+      if title:
+        pass  # tool execution shown inline
+  except json.JSONDecodeError:
+    pass
+if last_text:
+  sys.stdout.write(last_text + '\n')
+" 2>/dev/null
+
+  # Show tool outputs (the actual command results)
+  echo "$result" | python3 -c "
+import sys, json
+for line in sys.stdin:
+  line = line.strip()
+  if not line:
+    continue
+  try:
+    event = json.loads(line)
+    p = event.get('part', {})
+    if p.get('type') == 'tool' and p.get('state', {}).get('status') == 'completed':
+      out = p.get('state', {}).get('output', '')
+      if out and out.strip():
+        sys.stdout.write(out)
+  except json.JSONDecodeError:
+    pass
+" 2>/dev/null
+
+  run_hooks "post-task" "$message" "$exit_code"
   cmd_learn "$message"
 
   return $exit_code
@@ -84,32 +143,25 @@ cmd_task() {
 # ─── Send message to OpenClaw agent ──────────────────────────
 cmd_agent() {
   local message="$*"
-  if [ -z "$message" ]; then
-    echo "Usage: easy-claw agent <message>"
-    exit 1
-  fi
-  $OPENCLAW agent --message "$message" --expect-final
+  [ -z "$message" ] && { echo "Usage: easy-claw agent <message>"; exit 1; }
+  $OPENCLAW agent --agent main --message "$message" 2>&1
 }
 
 # ─── Cron management via OpenClaw ────────────────────────────
-cmd_cron() {
-  $OPENCLAW cron "$@"
-}
+cmd_cron() { $OPENCLAW cron "$@"; }
 
 # ─── Skill management ────────────────────────────────────────
 cmd_skill() {
   local action="$1"
   shift 2>/dev/null || true
-
   case "$action" in
     list|ls)
       echo "=== Easy Claw Skills ==="
       for skill in "$EASYCLAW_DIR"/skills/*.md; do
-        if [ -f "$skill" ]; then
-          name=$(basename "$skill" .md)
-          desc=$(head -5 "$skill" | grep "^#" | head -1 | sed 's/^#* *//')
-          echo "  /$name  — $desc"
-        fi
+        [ -f "$skill" ] || continue
+        name=$(basename "$skill" .md)
+        desc=$(head -5 "$skill" | grep "^#" | head -1 | sed 's/^#* *//')
+        echo "  /$name  — $desc"
       done
       echo ""
       echo "=== OpenClaw Bundled Skills ==="
@@ -119,10 +171,7 @@ cmd_skill() {
       local name="$1"
       shift
       local desc="$*"
-      if [ -z "$name" ]; then
-        echo "Usage: easy-claw skill create <name> [description]"
-        exit 1
-      fi
+      [ -z "$name" ] && { echo "Usage: easy-claw skill create <name> [description]"; exit 1; }
       cat > "$EASYCLAW_DIR/skills/$name.md" <<SKILLEOF
 # $name
 ${desc:-"A skill for Easy Claw."}
@@ -137,19 +186,14 @@ SKILLEOF
       ;;
     info)
       local name="$1"
-      if [ -z "$name" ]; then
-        echo "Usage: easy-claw skill info <name>"
-        exit 1
-      fi
+      [ -z "$name" ] && { echo "Usage: easy-claw skill info <name>"; exit 1; }
       if [ -f "$EASYCLAW_DIR/skills/$name.md" ]; then
         cat "$EASYCLAW_DIR/skills/$name.md"
       else
         $OPENCLAW skills info "$name"
       fi
       ;;
-    *)
-      cmd_help
-      ;;
+    *) cmd_help ;;
   esac
 }
 
@@ -157,7 +201,6 @@ SKILLEOF
 cmd_memory() {
   local action="$1"
   shift 2>/dev/null || true
-
   case "$action" in
     list|ls)
       echo "=== MEMORY.md ==="
@@ -171,10 +214,7 @@ cmd_memory() {
       ;;
     add)
       local msg="$*"
-      if [ -n "$msg" ]; then
-        echo "- $(date +%Y-%m-%d): $msg" >> "$EASYCLAW_DIR/MEMORY.md"
-        echo "Added to MEMORY.md"
-      fi
+      [ -n "$msg" ] && echo "- $(date +%Y-%m-%d): $msg" >> "$EASYCLAW_DIR/MEMORY.md" && echo "Added to MEMORY.md"
       ;;
     search)
       $OPENCLAW memory search "$@"
@@ -182,54 +222,48 @@ cmd_memory() {
     index)
       $OPENCLAW memory index --force
       ;;
-    *)
-      echo "Usage: easy-claw memory <list|add|search|index> [args]"
-      ;;
+    *) echo "Usage: easy-claw memory <list|add|search|index> [args]" ;;
   esac
 }
 
 # ─── Channel management via OpenClaw ─────────────────────────
-cmd_channel() {
-  $OPENCLAW channels "$@"
-}
+cmd_channel() { $OPENCLAW channels "$@"; }
 
 # ─── Hook management ─────────────────────────────────────────
 cmd_hook() {
   local action="$1"
   shift 2>/dev/null || true
-
   case "$action" in
     list|ls)
       echo "=== Easy Claw Hooks ==="
       for hook in "$EASYCLAW_DIR"/hooks/*.sh; do
-        if [ -f "$hook" ]; then
-          echo "  $(basename "$hook" .sh)"
-        fi
+        [ -f "$hook" ] && echo "  $(basename "$hook" .sh)"
       done
       ;;
     create)
       local name="$1"
-      if [ -z "$name" ]; then
-        echo "Usage: easy-claw hook create <name>"
-        exit 1
-      fi
+      [ -z "$name" ] && { echo "Usage: easy-claw hook create <name>"; exit 1; }
       cat > "$EASYCLAW_DIR/hooks/$name.sh" <<'HOOKEOF'
 #!/bin/bash
-# Easy Claw Hook
 echo "[hook] $EASYCLAW_HOOK_PHASE: $EASYCLAW_HOOK_MESSAGE"
 HOOKEOF
       chmod +x "$EASYCLAW_DIR/hooks/$name.sh"
       echo "Created hook: $name"
       ;;
-    *)
-      echo "Usage: easy-claw hook <list|create>"
-      ;;
+    *) echo "Usage: easy-claw hook <list|create>" ;;
   esac
 }
 
 # ─── Status ──────────────────────────────────────────────────
 cmd_status() {
   echo "=== Easy Claw Status ==="
+  echo ""
+  echo "--- OpenCode Server ---"
+  if [ -f "$OPENCODE_PIDFILE" ] && kill -0 "$(cat "$OPENCODE_PIDFILE")" 2>/dev/null; then
+    echo "Running (PID $(cat "$OPENCODE_PIDFILE")) on port $OPENCODE_PORT"
+  else
+    echo "Not running"
+  fi
   echo ""
   echo "--- OpenClaw ---"
   $OPENCLAW gateway health 2>&1 || echo "Gateway not running"
@@ -251,19 +285,13 @@ cmd_status() {
 cmd_learn() {
   local task_message="$*"
   local exit_code="${EASYCLAW_HOOK_EXIT_CODE:-0}"
-
-  # Only learn from successful tasks
   [ "$exit_code" != "0" ] && return 0
 
   echo "🔄 Learning from task..."
-
-  # Check if a skill should be created from this task
   local skill_name=$(echo "$task_message" | tr ' ' '-' | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]//g' | head -c 40)
 
-  # Add to memory
   echo "- $(date +%Y-%m-%d): Completed task: $task_message" >> "$EASYCLAW_DIR/MEMORY.md"
 
-  # If task matches known patterns, auto-create skill
   if echo "$task_message" | grep -qiE "(deploy|build|setup|install|configure|migrate|backup|monitor|check|audit|scan|test)"; then
     if [ ! -f "$EASYCLAW_DIR/skills/$skill_name.md" ]; then
       cat > "$EASYCLAW_DIR/skills/$skill_name.md" <<SKILLEOF
@@ -292,15 +320,11 @@ run_hooks() {
   local phase="$1"
   local message="$2"
   local exit_code="${3:-0}"
-
   export EASYCLAW_HOOK_PHASE="$phase"
   export EASYCLAW_HOOK_MESSAGE="$message"
   export EASYCLAW_HOOK_EXIT_CODE="$exit_code"
-
   for hook in "$EASYCLAW_DIR/hooks/"*.sh; do
-    if [ -f "$hook" ] && [ -x "$hook" ]; then
-      bash "$hook"
-    fi
+    [ -f "$hook" ] && [ -x "$hook" ] && bash "$hook"
   done
 }
 
@@ -308,39 +332,22 @@ run_hooks() {
 cmd_mcp() {
   local action="$1"
   shift 2>/dev/null || true
-
   case "$action" in
     list|ls)
-      if [ -f "$EASYCLAW_DIR/mcp/servers.json" ]; then
-        cat "$EASYCLAW_DIR/mcp/servers.json"
-      else
-        echo "No MCP servers configured."
-      fi
+      [ -f "$EASYCLAW_DIR/mcp/servers.json" ] && cat "$EASYCLAW_DIR/mcp/servers.json" || echo "No MCP servers configured."
       ;;
     add)
       local name="$1"
       local command="$2"
-      if [ -z "$name" ] || [ -z "$command" ]; then
-        echo "Usage: easy-claw mcp add <name> <command>"
-        exit 1
-      fi
-      local servers_file="$EASYCLAW_DIR/mcp/servers.json"
-      if [ ! -f "$servers_file" ]; then
-        echo '{"mcpServers":{}}' > "$servers_file"
-      fi
-      # Simple JSON append (requires jq ideally, fallback to basic)
+      [ -z "$name" ] || [ -z "$command" ] && { echo "Usage: easy-claw mcp add <name> <command>"; exit 1; }
+      local sf="$EASYCLAW_DIR/mcp/servers.json"
+      [ ! -f "$sf" ] && echo '{"mcpServers":{}}' > "$sf"
       if command -v jq &>/dev/null; then
-        jq --arg name "$name" --arg cmd "$command" \
-          '.mcpServers[$name] = {"command": $cmd}' "$servers_file" > "${servers_file}.tmp" \
-          && mv "${servers_file}.tmp" "$servers_file"
-      else
-        echo "jq not available. Add manually to $servers_file"
+        jq --arg n "$name" --arg c "$command" '.mcpServers[$n] = {"command": $c}' "$sf" > "${sf}.tmp" && mv "${sf}.tmp" "$sf"
       fi
       echo "Added MCP server: $name"
       ;;
-    *)
-      echo "Usage: easy-claw mcp <list|add>"
-      ;;
+    *) echo "Usage: easy-claw mcp <list|add>" ;;
   esac
 }
 
@@ -349,26 +356,20 @@ cmd_setup() {
   echo "=== Easy Claw Setup Wizard ==="
   echo ""
 
-  # Check OpenClaw
-  if command -v "$OPENCLAW" &>/dev/null; then
-    echo "✓ OpenClaw found: $OPENCLAW"
-    $OPENCLAW gateway health &>/dev/null && echo "✓ Gateway running" || echo "⚠ Gateway not running (start with: openclaw gateway)"
-  else
-    echo "✗ OpenClaw not found. Install: npm install -g openclaw@latest"
-  fi
-
   # Check OpenCode
   if command -v "$OPENCODE" &>/dev/null; then
     echo "✓ OpenCode found: $OPENCODE"
   else
-    echo "✗ OpenCode not found."
+    echo "✗ OpenCode not found. Install: npm install -g opencode@latest"
+    exit 1
   fi
 
-  # Check Ollama
-  if curl -s http://127.0.0.1:11434/api/tags &>/dev/null; then
-    echo "✓ Ollama running"
+  # Check OpenClaw (optional)
+  if command -v "$OPENCLAW" &>/dev/null; then
+    echo "✓ OpenClaw found: $OPENCLAW"
+    $OPENCLAW gateway health &>/dev/null && echo "✓ Gateway running" || echo "⚠ Gateway not running"
   else
-    echo "⚠ Ollama not detected. Start with: ollama serve"
+    echo "○ OpenClaw not found (optional — for messaging/cron)"
   fi
 
   # Create default hooks
@@ -383,12 +384,49 @@ HOOKEOF
   done
   echo "✓ Default hooks created"
 
-  # Create OpenClaw cron integration
-  $OPENCLAW cron list &>/dev/null && echo "✓ Cron accessible" || echo "⚠ Cron not available"
+  # Start OpenCode server
+  echo ""
+  echo "Starting OpenCode server..."
+  cmd_start
 
   echo ""
-  echo "Easy Claw setup complete!"
-  echo "Try: easy-claw task 'check system health'"
+  echo "✓ Easy Claw setup complete!"
+  echo "Try: easy-claw task 'what is the current date and time'"
+}
+
+# ─── Help ────────────────────────────────────────────────────
+cmd_help() {
+  cat <<'EOF'
+Easy Claw v1.0 — Ultimate Free Agentic System
+https://github.com/udaydomadiya08/easy-claw
+
+OpenCode models as the NL bridge.
+Say "check the time" — Easy Claw runs `date`. No hardcoding.
+
+Usage: easy-claw <command> [options]
+
+Commands:
+  task <msg>     Say what you want — Easy Claw figures it out
+  start          Start OpenCode server (background daemon)
+  stop           Stop the server
+  restart        Restart the server
+  cron           Manage scheduled tasks (requires OpenClaw)
+  skill          Manage skills (list, create, info)
+  memory         Manage memory store
+  channel        Manage messaging channels (requires OpenClaw)
+  hook           Manage lifecycle hooks
+  status         Show system status
+  mcp            Manage MCP connectors
+  version        Show version
+  setup          One-time setup
+
+Examples:
+  easy-claw task "what time is it"
+  easy-claw task "check disk space"
+  easy-claw task "who am i"
+  easy-claw task "how much memory is free"
+  easy-claw task "list files in current directory"
+EOF
 }
 
 # ─── Main dispatcher ─────────────────────────────────────────
@@ -398,46 +436,25 @@ main() {
   shift 2>/dev/null || true
 
   case "$cmd" in
-    help|--help|-h)
-      cmd_help
-      ;;
+    help|--help|-h) cmd_help ;;
     version|--version|-v)
       echo "Easy Claw v1.0 — MIT License"
       echo "https://github.com/udaydomadiya08/easy-claw"
       ;;
-    task)
-      cmd_task "$@"
-      ;;
-    agent)
-      cmd_agent "$@"
-      ;;
-    cron)
-      cmd_cron "$@"
-      ;;
-    skill)
-      cmd_skill "$@"
-      ;;
-    memory)
-      cmd_memory "$@"
-      ;;
-    channel)
-      cmd_channel "$@"
-      ;;
-    hook)
-      cmd_hook "$@"
-      ;;
-    status)
-      cmd_status
-      ;;
-    learn)
-      cmd_learn "$@"
-      ;;
-    mcp)
-      cmd_mcp "$@"
-      ;;
-    setup)
-      cmd_setup
-      ;;
+    start) cmd_start ;;
+    stop) cmd_stop ;;
+    restart) cmd_restart ;;
+    task) cmd_task "$@" ;;
+    agent) cmd_agent "$@" ;;
+    cron) cmd_cron "$@" ;;
+    skill) cmd_skill "$@" ;;
+    memory) cmd_memory "$@" ;;
+    channel) cmd_channel "$@" ;;
+    hook) cmd_hook "$@" ;;
+    status) cmd_status ;;
+    learn) cmd_learn "$@" ;;
+    mcp) cmd_mcp "$@" ;;
+    setup) cmd_setup ;;
     *)
       echo "Unknown command: $cmd"
       cmd_help
