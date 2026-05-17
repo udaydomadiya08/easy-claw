@@ -1,13 +1,15 @@
 #!/bin/bash
 # Easy Claw — Ultimate Free Agentic System
-# OpenCode models as the NL bridge, OpenClaw as backend, Hermes learning loop
+# OpenCode models as the NL bridge. First run auto-setups. Zero config.
 
-set -e
+# Self-ensure executable (first run fix)
+[ -x "$0" ] || chmod +x "$0" 2>/dev/null
 
 EASYCLAW_DIR="$(python3 -c "import os,sys; print(os.path.dirname(os.path.realpath(sys.argv[1])))" "$0")"
 OPENCLAW="${OPENCLAW_BIN:-openclaw}"
 OPENCODE="${OPENCODE_BIN:-opencode}"
 OPENCODE_PORT=15999
+mkdir -p "$EASYCLAW_DIR/state"
 OPENCODE_PIDFILE="$EASYCLAW_DIR/state/opencode.pid"
 
 export EASYCLAW_DIR
