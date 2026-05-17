@@ -432,6 +432,8 @@ cmd_model() {
 
       local model=""
       if [[ "$input" =~ ^[0-9]+$ ]]; then
+        # Always pull fresh list so index always matches current OpenCode models
+        "$OPENCODE" models > "$MODEL_LIST_FILE" 2>&1
         model=$(sed -n "${input}p" "$MODEL_LIST_FILE" 2>/dev/null)
         [ -z "$model" ] && { echo "Invalid index: $input"; exit 1; }
       else
