@@ -75,7 +75,7 @@ cd easy-claw
 ./easy-claw.sh task "what time is it"   # First run auto-setups everything
 ```
 
-> **No `chmod +x`, no `ln -s`, no `easy-claw setup` needed.** The script self-fixes permissions and auto-starts the OpenCode server on first run.
+> **No `chmod +x`, no `ln -s`, no `easy-claw setup` needed.** The script self-fixes permissions and auto-starts the OpenCode server on first run. Tasks auto-continue the same session — context is preserved across calls. Output is always clean — just the answer, no noise.
 
 To add to PATH for `easy-claw` from anywhere:
 ```bash
@@ -88,12 +88,14 @@ ln -s "$PWD/easy-claw.sh" ~/.opencode/bin/easy-claw
 # List and select models (always pulls fresh list from OpenCode)
 ./easy-claw.sh models                         # Show available models with numbers
 ./easy-claw.sh model set 3                    # Select by index
-./easy-claw.sh model set opencode/qwen3.6-plus-free  # Or by full name
 
-# Execute a task (uses OpenCode as bridge)
-./easy-claw.sh task "check system health"
-./easy-claw.sh task "backup my documents to ~/backups"
-./easy-claw.sh task "summarize the project in this directory"
+# Execute tasks — clean output, just the answer
+./easy-claw.sh task "what time is it"
+./easy-claw.sh task "check disk space"
+
+# Session continuation — context preserved across tasks
+./easy-claw.sh task "what is my username"     # → uday
+./easy-claw.sh task "what was my first question"  # → "what is my username"
 
 # Send message via any channel (requires OpenClaw channel setup)
 easy-claw channel login
