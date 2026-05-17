@@ -53,19 +53,29 @@ cmd_restart() {
 }
 
 # ─── Execute task via OpenCode bridge (NL → command) ────────
+EASYCLAW_SESSION_FILE="$EASYCLAW_DIR/state/.last_session"
+
 cmd_task() {
   local message="$*"
-  [ -z "$message" ] && { echo "Usage: easy-claw task <message>"; exit 1; }
+  [ -z "$message" ] && { echo "Usage: easy-claw task <message>" >&2; exit 1; }
 
-  run_hooks "pre-task" "$message"
-
-  echo "🦞 Easy Claw — processing: $message"
-  echo "───────────────────────────────────────────────"
+  run_hooks "pre-task" "$message" >/dev/null 2>&1
 
   # Ensure OpenCode server is running
   if [ ! -f "$OPENCODE_PIDFILE" ] || ! kill -0 "$(cat "$OPENCODE_PIDFILE")" 2>/dev/null; then
-    echo "Starting OpenCode server..."
-    cmd_start
+    cmd_start >/dev/null 2>&1
+    sleep 1
+    rm -f "$EASYCLAW_SESSION_FILE"
+  fi
+
+  # Check if we have a previous session to continue
+  local continue_flag=""
+  if [ -f "$EASYCLAW_SESSION_FILE" ]; then
+    local sid
+    sid=$(cat "$EASYCLAW_SESSION_FILE")
+    if [ -n "$sid" ]; then
+      continue_flag="--session $sid"
+    fi
   fi
 
   # Send to OpenCode server (non-interactive, JSON output)
@@ -73,29 +83,30 @@ cmd_task() {
   result=$("$OPENCODE" run "$message" \
     --attach "http://127.0.0.1:$OPENCODE_PORT" \
     --model "$EASYCLAW_MODEL" \
+    $continue_flag \
     --format json \
     --dangerously-skip-permissions 2>&1)
 
   local exit_code=$?
 
-  # Extract and display final text from JSON events
+  # Save session ID from response for continuation
   echo "$result" | python3 -c "
 import sys, json
 for line in sys.stdin:
-  line = line.strip()
-  if not line:
-    continue
-  try:
-    event = json.loads(line)
-    if event.get('type') == 'step_finish':
-      parts = event.get('part', {})
-      reason = parts.get('reason', '')
-      tokens = parts.get('tokens', {})
-  except json.JSONDecodeError:
-    pass
+    line = line.strip()
+    if not line: continue
+    try:
+        e = json.loads(line)
+        sid = e.get('sessionID', '')
+        if sid:
+            with open('$EASYCLAW_SESSION_FILE', 'w') as f:
+                f.write(sid)
+            break
+    except:
+        pass
 " 2>/dev/null
 
-  # Show readable summary
+  # Extract and display final text from JSON events
   echo "$result" | python3 -c "
 import sys, json
 last_text = ''
@@ -108,11 +119,6 @@ for line in sys.stdin:
     p = event.get('part', {})
     if p.get('type') == 'text':
       last_text = p.get('text', '')
-    elif p.get('type') == 'tool' and p.get('state', {}).get('status') == 'completed':
-      out = p.get('state', {}).get('output', '')
-      title = p.get('state', {}).get('title', '') or p.get('state', {}).get('input', {}).get('description', '')
-      if title:
-        pass  # tool execution shown inline
   except json.JSONDecodeError:
     pass
 if last_text:
@@ -137,8 +143,8 @@ for line in sys.stdin:
     pass
 " 2>/dev/null
 
-  run_hooks "post-task" "$message" "$exit_code"
-  cmd_learn "$message"
+  run_hooks "post-task" "$message" "$exit_code" >/dev/null 2>&1
+  cmd_learn "$message" >/dev/null 2>&1
 
   return $exit_code
 }
