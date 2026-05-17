@@ -7,8 +7,8 @@ export OPENCODE_BIN="${OPENCODE_BIN:-/Users/uday/.opencode/bin/opencode}"
 # OpenClaw backend binary
 export OPENCLAW_BIN="${OPENCLAW_BIN:-openclaw}"
 
-# Default model (local Ollama)
-export EASYCLAW_MODEL="${EASYCLAW_MODEL:-ollama/qwen2.5-coder:latest}"
+# Default model (OpenCode-provided free model — no API keys needed)
+export EASYCLAW_MODEL="${EASYCLAW_MODEL:-opencode/deepseek-v4-flash-free}"
 
 # Data directories
 export EASYCLAW_SKILLS_DIR="${EASYCLAW_DIR}/skills"

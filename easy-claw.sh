@@ -72,6 +72,7 @@ cmd_task() {
   local result
   result=$("$OPENCODE" run "$message" \
     --attach "http://127.0.0.1:$OPENCODE_PORT" \
+    --model "$EASYCLAW_MODEL" \
     --format json \
     --dangerously-skip-permissions 2>&1)
 
@@ -396,6 +397,45 @@ HOOKEOF
   echo "Try: easy-claw task 'what is the current date and time'"
 }
 
+# ─── List available models ──────────────────────────────
+cmd_models() {
+  local filter="${1:-}"
+  if [ -n "$filter" ]; then
+    "$OPENCODE" models "$filter" 2>&1
+  else
+    echo "Available OpenCode models:"
+    "$OPENCODE" models 2>&1
+    echo ""
+    echo "Current model: $EASYCLAW_MODEL"
+    echo "Set with: easy-claw model set <provider/model>"
+  fi
+}
+
+# ─── Model management ──────────────────────────────────
+cmd_model() {
+  local action="$1"
+  shift 2>/dev/null || true
+  case "$action" in
+    set)
+      local model="$1"
+      [ -z "$model" ] && { echo "Usage: easy-claw model set <provider/model>"; echo "See: easy-claw models"; exit 1; }
+      if grep -q "^export EASYCLAW_MODEL=" "$EASYCLAW_DIR/config.sh" 2>/dev/null; then
+        sed -i '' "s|^export EASYCLAW_MODEL=.*|export EASYCLAW_MODEL=${model}|" "$EASYCLAW_DIR/config.sh"
+      else
+        echo "export EASYCLAW_MODEL=${model}" >> "$EASYCLAW_DIR/config.sh"
+      fi
+      echo "✓ Model set to: $model"
+      ;;
+    show|"")
+      echo "$EASYCLAW_MODEL"
+      ;;
+    *)
+      echo "Usage: easy-claw model set <provider/model> | easy-claw model show"
+      exit 1
+      ;;
+  esac
+}
+
 # ─── Help ────────────────────────────────────────────────────
 cmd_help() {
   cat <<'EOF'
@@ -419,8 +459,10 @@ Commands:
   hook           Manage lifecycle hooks
   status         Show system status
   mcp            Manage MCP connectors
+  models [prov]  List available OpenCode models
+  model set|show Set/show the active model
   version        Show version
-  setup          One-time setup
+  setup          One-time setup (first run auto-runs this)
 
 Examples:
   easy-claw task "what time is it"
@@ -446,7 +488,7 @@ main() {
     start) cmd_start ;;
     stop) cmd_stop ;;
     restart) cmd_restart ;;
-    task) cmd_task "$@" ;;
+    task|run) cmd_task "$@" ;;
     agent) cmd_agent "$@" ;;
     cron) cmd_cron "$@" ;;
     skill) cmd_skill "$@" ;;
@@ -457,6 +499,8 @@ main() {
     learn) cmd_learn "$@" ;;
     mcp) cmd_mcp "$@" ;;
     setup) cmd_setup ;;
+    models) cmd_models "$@" ;;
+    model) cmd_model "$@" ;;
     *)
       echo "Unknown command: $cmd"
       cmd_help
