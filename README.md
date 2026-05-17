@@ -85,19 +85,15 @@ ln -s "$PWD/easy-claw.sh" ~/.opencode/bin/easy-claw
 ### Usage
 
 ```bash
-# Pick a model first (optional — defaults to a free OpenCode model)
-./easy-claw.sh models           # List available models with numbers
-./easy-claw.sh model set 3      # Select by index number
+# List and select models (always pulls fresh list from OpenCode)
+./easy-claw.sh models                         # Show available models with numbers
+./easy-claw.sh model set 3                    # Select by index
+./easy-claw.sh model set opencode/qwen3.6-plus-free  # Or by full name
 
 # Execute a task (uses OpenCode as bridge)
 ./easy-claw.sh task "check system health"
 ./easy-claw.sh task "backup my documents to ~/backups"
 ./easy-claw.sh task "summarize the project in this directory"
-
-# List and select models (free OpenCode models, no API keys needed)
-easy-claw models
-easy-claw model set 3              # Select by index
-easy-claw model set opencode/qwen3.6-plus-free  # Or by full name
 
 # Send message via any channel (requires OpenClaw channel setup)
 easy-claw channel login
