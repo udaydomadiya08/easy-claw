@@ -157,6 +157,9 @@ for line in sys.stdin:
       while [ -z "$user_input" ]; do
         printf "> "
         read -r user_input
+        case "$user_input" in
+          exit|quit|bye|stop|q) return 0 ;;
+        esac
       done
       current_message="$user_input"
       continue_flag="--session $(cat "$EASYCLAW_SESSION_FILE" 2>/dev/null)"
