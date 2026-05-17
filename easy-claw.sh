@@ -26,7 +26,8 @@ done
 
 cmd_help() {
   cat <<'EOF'
-Easy Claw — Ultimate Free Agentic System
+Easy Claw v1.0 — Ultimate Free Agentic System
+https://github.com/udaydomadiya08/easy-claw
 
 Usage: easy-claw <command> [options]
 
@@ -405,6 +406,10 @@ main() {
   case "$cmd" in
     help|--help|-h)
       cmd_help
+      ;;
+    version|--version|-v)
+      echo "Easy Claw v1.0 — MIT License"
+      echo "https://github.com/udaydomadiya08/easy-claw"
       ;;
     task)
       cmd_task "$@"
