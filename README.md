@@ -8,13 +8,10 @@ best features from **OpenClaw**, **Hermes Agent**, **Claude Code**, and
 running entirely on local models via Ollama with zero API costs.
 
 ```bash
-# One-line install
+# One-line install — zero config, works immediately
 git clone https://github.com/udaydomadiya08/easy-claw.git
 cd easy-claw
-chmod +x easy-claw.sh hooks/*.sh modules/*.sh
-ln -s "$PWD/easy-claw.sh" "$(dirname "$(command -v opencode)")/easy-claw"
-easy-claw setup
-easy-claw task "what time is it"   # First task!
+./easy-claw.sh task "what time is it"   # First task — auto-starts everything!
 ```
 
 ## Why Easy Claw?
@@ -26,7 +23,7 @@ self-improvement. Claude Code has skills and hooks. Claude Desktop has MCP.
 
 | Feature | From | How Easy Claw Implements It |
 |---|---|---|
-| **Bridge Engine** | OpenCode | Core reasoning & execution via OpenCode models |
+| **Bridge Engine** | OpenCode | Core reasoning & execution via OpenCode models (free, no API key needed) |
 | **24/7 Gateway Daemon** | OpenClaw | Background LaunchAgent/systemd service |
 | **Multi-Channel Messaging** | OpenClaw | WhatsApp, Telegram, Discord, Slack, Signal, iMessage, +15 more |
 | **Self-Improving Loop** | Hermes Agent | Post-task evaluation auto-creates/updates skills |
@@ -37,7 +34,7 @@ self-improvement. Claude Code has skills and hooks. Claude Desktop has MCP.
 | **Cron Scheduler** | OpenClaw | Scheduled background tasks with channel delivery |
 | **Subagent Delegation** | Hermes/Claude | Isolated child agents for parallel work |
 | **Plugin System** | OpenClaw | 50+ bundled plugins (GitHub, 1Password, Apple Notes, etc.) |
-| **100% Free & Local** | Ollama | Runs on local models, zero API costs |
+| **100% Free & Model Choice** | OpenCode | Free built-in models, no API key or Ollama required |
 
 ## Architecture
 
@@ -68,27 +65,39 @@ self-improvement. Claude Code has skills and hooks. Claude Desktop has MCP.
 
 ### Prerequisites
 
-- **OpenCode** — `npm install -g opencode@latest`
-- **OpenClaw** — `npm install -g openclaw@latest`
-- **Ollama** — Download from [ollama.com](https://ollama.com) (for free local models)
+- **OpenCode** — `npm install -g opencode@latest` (includes free models — no API key needed)
 
 ### Install
 
 ```bash
 git clone https://github.com/udaydomadiya08/easy-claw.git
 cd easy-claw
-chmod +x easy-claw.sh hooks/*.sh modules/*.sh
-ln -s "$PWD/easy-claw.sh" ~/bin/easy-claw
-easy-claw setup
+./easy-claw.sh task "what time is it"   # First run auto-setups everything
+```
+
+> **No `chmod +x`, no `ln -s`, no `easy-claw setup` needed.** The script self-fixes permissions and auto-starts the OpenCode server on first run.
+
+To add to PATH for `easy-claw` from anywhere:
+```bash
+ln -s "$PWD/easy-claw.sh" ~/.opencode/bin/easy-claw
 ```
 
 ### Usage
 
 ```bash
+# Pick a model first (optional — defaults to a free OpenCode model)
+./easy-claw.sh models           # List available models with numbers
+./easy-claw.sh model set 3      # Select by index number
+
 # Execute a task (uses OpenCode as bridge)
-easy-claw task "check system health"
-easy-claw task "backup my documents to ~/backups"
-easy-claw task "summarize the project in this directory"
+./easy-claw.sh task "check system health"
+./easy-claw.sh task "backup my documents to ~/backups"
+./easy-claw.sh task "summarize the project in this directory"
+
+# List and select models (free OpenCode models, no API keys needed)
+easy-claw models
+easy-claw model set 3              # Select by index
+easy-claw model set opencode/qwen3.6-plus-free  # Or by full name
 
 # Send message via any channel (requires OpenClaw channel setup)
 easy-claw channel login
@@ -198,8 +207,8 @@ easy-claw/
 ## Requirements
 
 - **macOS**, **Linux**, or **Windows (WSL2)**
-- **Node.js** 22+ (for OpenCode and OpenClaw)
-- **Ollama** (for free local models — or any OpenAI/Anthropic API key)
+- **Node.js** 22+ (for OpenCode)
+- **OpenCode** — `npm install -g opencode@latest` (free models built-in, no API keys)
 
 ## The Vision
 
