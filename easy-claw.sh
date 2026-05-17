@@ -397,28 +397,47 @@ HOOKEOF
   echo "Try: easy-claw task 'what is the current date and time'"
 }
 
-# ─── List available models ──────────────────────────────
+# ─── List available models with indices ─────────────────
+MODEL_LIST_FILE="$EASYCLAW_DIR/state/.model_list"
+
 cmd_models() {
   local filter="${1:-}"
   if [ -n "$filter" ]; then
     "$OPENCODE" models "$filter" 2>&1
-  else
-    echo "Available OpenCode models:"
-    "$OPENCODE" models 2>&1
-    echo ""
-    echo "Current model: $EASYCLAW_MODEL"
-    echo "Set with: easy-claw model set <provider/model>"
+    return
   fi
+
+  "$OPENCODE" models 2>"$MODEL_LIST_FILE" > "$MODEL_LIST_FILE"
+  echo "Available OpenCode models ($(wc -l < "$MODEL_LIST_FILE" | tr -d ' ')):"
+  awk '{print NR")", $0}' "$MODEL_LIST_FILE"
+  echo ""
+  echo "Current model: $EASYCLAW_MODEL"
+  echo "Set with: easy-claw model set <number>"
 }
 
-# ─── Model management ──────────────────────────────────
+# ─── Model management (set by index or name) ────────────
 cmd_model() {
   local action="$1"
   shift 2>/dev/null || true
+
+  # Rebuild model list if missing
+  if [ ! -f "$MODEL_LIST_FILE" ]; then
+    "$OPENCODE" models 2>"$MODEL_LIST_FILE" > "$MODEL_LIST_FILE"
+  fi
+
   case "$action" in
     set)
-      local model="$1"
-      [ -z "$model" ] && { echo "Usage: easy-claw model set <provider/model>"; echo "See: easy-claw models"; exit 1; }
+      local input="$1"
+      [ -z "$input" ] && { echo "Usage: easy-claw model set <number|provider/model>"; echo "See: easy-claw models"; exit 1; }
+
+      local model=""
+      if [[ "$input" =~ ^[0-9]+$ ]]; then
+        model=$(sed -n "${input}p" "$MODEL_LIST_FILE" 2>/dev/null)
+        [ -z "$model" ] && { echo "Invalid index: $input"; exit 1; }
+      else
+        model="$input"
+      fi
+
       if grep -q "^export EASYCLAW_MODEL=" "$EASYCLAW_DIR/config.sh" 2>/dev/null; then
         sed -i '' "s|^export EASYCLAW_MODEL=.*|export EASYCLAW_MODEL=${model}|" "$EASYCLAW_DIR/config.sh"
       else
@@ -429,8 +448,11 @@ cmd_model() {
     show|"")
       echo "$EASYCLAW_MODEL"
       ;;
+    list)
+      cmd_models
+      ;;
     *)
-      echo "Usage: easy-claw model set <provider/model> | easy-claw model show"
+      echo "Usage: easy-claw model set <number|provider/model> | easy-claw model show | easy-claw model list"
       exit 1
       ;;
   esac
